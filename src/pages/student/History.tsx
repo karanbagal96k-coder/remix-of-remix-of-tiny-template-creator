@@ -1,13 +1,17 @@
+// FRONTEND FROZEN — BACKEND IS SOURCE OF TRUTH
 /**
  * Student Match History Page
  * 
- * FRONTEND FROZEN — BACKEND INTEGRATION ONLY
+ * BACKEND AUTHORITY MODEL:
+ * - All history data comes from backend
+ * - Frontend only renders backend-provided state
+ * - NO mock data or local inference
  * 
  * OWNERSHIP: SYSTEM
  * STUDENT ACCESS: READ-ONLY
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import StudentHeader from "@/components/StudentHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +36,8 @@ import {
   Sparkles,
   Info,
 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import api from "@/utils/api";
 
 // ============================================================================
 // TYPES
@@ -56,96 +62,6 @@ interface MatchHistoryItem {
   explanation: string[];
   systemNote?: string;
 }
-
-// ============================================================================
-// MOCK DATA
-// ============================================================================
-
-const MOCK_HISTORY: MatchHistoryItem[] = [
-  {
-    id: "mh-001",
-    roleTitle: "Software Developer Intern",
-    companyName: "TechCorp Solutions",
-    location: "Bangalore, Karnataka",
-    score: 87,
-    status: "accepted",
-    generatedAt: "2024-01-10T14:30:00Z",
-    explanation: [
-      "Strong match with required technical skills",
-      "Location preference aligned",
-      "Experience level suitable for role",
-    ],
-    systemNote: "Offer extended by company on Jan 12, 2024",
-  },
-  {
-    id: "mh-002",
-    roleTitle: "Data Analyst",
-    companyName: "Analytics Hub",
-    location: "Mumbai, Maharashtra",
-    score: 72,
-    status: "under_review",
-    generatedAt: "2024-01-08T09:15:00Z",
-    explanation: [
-      "Good analytical skills match",
-      "Python proficiency noted",
-      "Prior internship experience valued",
-    ],
-    systemNote: "Company reviewing shortlist",
-  },
-  {
-    id: "mh-003",
-    roleTitle: "Frontend Developer",
-    companyName: "WebWorks India",
-    location: "Hyderabad, Telangana",
-    score: 65,
-    status: "waitlisted",
-    generatedAt: "2024-01-05T11:00:00Z",
-    explanation: [
-      "React skills aligned with requirements",
-      "Portfolio projects relevant",
-    ],
-    systemNote: "Pending final decision",
-  },
-  {
-    id: "mh-004",
-    roleTitle: "Backend Engineer",
-    companyName: "CloudFirst Technologies",
-    location: "Pune, Maharashtra",
-    score: 58,
-    status: "rejected",
-    generatedAt: "2024-01-03T16:45:00Z",
-    explanation: [
-      "Partial skill match",
-      "Limited backend experience",
-    ],
-    systemNote: "Position required senior-level experience",
-  },
-  {
-    id: "mh-005",
-    roleTitle: "ML Engineer Intern",
-    companyName: "AI Innovations",
-    location: "Delhi NCR",
-    score: 45,
-    status: "position_filled",
-    generatedAt: "2024-01-01T08:00:00Z",
-    explanation: [
-      "Basic ML knowledge matched",
-      "Academic projects noted",
-    ],
-    systemNote: "Position closed before review completed",
-  },
-  {
-    id: "mh-006",
-    roleTitle: "DevOps Trainee",
-    companyName: "InfraScale Systems",
-    location: "Chennai, Tamil Nadu",
-    score: 0,
-    status: "processing",
-    generatedAt: "2024-01-12T10:00:00Z",
-    explanation: [],
-    systemNote: "Evaluation in progress",
-  },
-];
 
 // ============================================================================
 // STATUS CONFIGURATION
@@ -198,7 +114,7 @@ const STATUS_CONFIGS: Record<MatchHistoryStatus, StatusConfig> = {
 };
 
 // ============================================================================
-// UTILITY FUNCTIONS
+// UTILITY FUNCTIONS (DISPLAY ONLY)
 // ============================================================================
 
 function formatDate(dateString: string): string {
@@ -414,11 +330,87 @@ function EmptyState() {
 }
 
 // ============================================================================
+// LOADING SKELETON
+// ============================================================================
+
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-6">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="flex gap-4">
+          <Skeleton className="w-10 h-10 rounded-full flex-shrink-0" />
+          <div className="flex-1">
+            <Skeleton className="h-32 w-full rounded-xl" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================================
 // MAIN COMPONENT
 // ============================================================================
 
 export default function History() {
-  const hasHistory = MOCK_HISTORY.length > 0;
+  const [history, setHistory] = useState<MatchHistoryItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  /**
+   * BACKEND-DRIVEN DATA FETCH
+   * 
+   * FRONTEND FROZEN — BACKEND AUTHORITY REQUIRED
+   */
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const response = await api.get<MatchHistoryItem[]>('/student/match-history');
+        setHistory(response.data);
+      } catch {
+        setError('Unable to load match history. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchHistory();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <StudentHeader />
+        <main className="container max-w-3xl mx-auto px-4 py-8">
+          <div className="mb-8">
+            <Skeleton className="h-8 w-48 mb-2" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <LoadingSkeleton />
+        </main>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background">
+        <StudentHeader />
+        <main className="container max-w-3xl mx-auto px-4 py-8">
+          <Card className="border-destructive/30">
+            <CardContent className="pt-6">
+              <div className="flex flex-col items-center text-center space-y-4">
+                <AlertCircle className="w-12 h-12 text-destructive" />
+                <p className="text-muted-foreground">{error}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    );
+  }
+
+  const hasHistory = history.length > 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -445,11 +437,11 @@ export default function History() {
         {/* Timeline */}
         {hasHistory ? (
           <div className="space-y-0">
-            {MOCK_HISTORY.map((item, index) => (
+            {history.map((item, index) => (
               <TimelineItem
                 key={item.id}
                 item={item}
-                isLast={index === MOCK_HISTORY.length - 1}
+                isLast={index === history.length - 1}
               />
             ))}
           </div>

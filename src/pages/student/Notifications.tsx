@@ -2,21 +2,24 @@
 /**
  * Student Notifications Page
  * 
+ * BACKEND AUTHORITY MODEL:
+ * - All notifications come from backend
+ * - Frontend only renders and marks as read
+ * - NO mock data or local state
+ * 
  * OWNERSHIP: SYSTEM & COMPANY
  * STUDENT ACCESS: READ-ONLY
- * 
- * This page displays system and company-generated notifications.
- * Students cannot reply, edit, or dismiss individual notifications.
- * The only action available is "Mark all as read".
  */
 
-import { useState } from 'react';
-import { Bell, Building2, Shield, Clock, CheckCheck, Inbox } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Bell, Building2, Shield, Clock, CheckCheck, Inbox, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import StudentHeader from '@/components/StudentHeader';
+import api from '@/utils/api';
 
 // ============================================================================
 // NOTIFICATION TYPES (SYSTEM-OWNED)
@@ -32,70 +35,7 @@ interface Notification {
 }
 
 // ============================================================================
-// MOCK DATA (REPLACE WITH API)
-// ============================================================================
-
-const MOCK_NOTIFICATIONS: Notification[] = [
-  {
-    id: 'notif-001',
-    type: 'company',
-    title: 'You have been accepted',
-    message: 'TechCorp Solutions has accepted your application for the Frontend Developer Intern position.',
-    timestamp: '2024-01-15T10:30:00Z',
-    read: false,
-  },
-  {
-    id: 'notif-002',
-    type: 'system',
-    title: 'You have been matched to a role',
-    message: 'Aura has identified a potential match based on your skills and preferences.',
-    timestamp: '2024-01-14T15:45:00Z',
-    read: false,
-  },
-  {
-    id: 'notif-003',
-    type: 'company',
-    title: 'Company reviewed your profile',
-    message: 'DataFlow Inc. has reviewed your profile and is currently evaluating candidates.',
-    timestamp: '2024-01-13T09:20:00Z',
-    read: true,
-  },
-  {
-    id: 'notif-004',
-    type: 'system',
-    title: 'Your profile is under evaluation',
-    message: 'Your profile has entered the matching queue. No action is required from your side.',
-    timestamp: '2024-01-12T14:00:00Z',
-    read: true,
-  },
-  {
-    id: 'notif-005',
-    type: 'company',
-    title: 'You have been waitlisted',
-    message: 'CloudBase Technologies has placed you on their waitlist. You may be contacted if a position opens.',
-    timestamp: '2024-01-11T11:15:00Z',
-    read: true,
-  },
-  {
-    id: 'notif-006',
-    type: 'system',
-    title: 'You will be considered for future matches',
-    message: 'Your profile remains active in the system. New opportunities will be matched automatically.',
-    timestamp: '2024-01-10T08:30:00Z',
-    read: true,
-  },
-  {
-    id: 'notif-007',
-    type: 'company',
-    title: 'You have been rejected',
-    message: 'InnovateTech has decided to proceed with other candidates for this role.',
-    timestamp: '2024-01-09T16:45:00Z',
-    read: true,
-  },
-];
-
-// ============================================================================
-// HELPER FUNCTIONS
+// HELPER FUNCTIONS (DISPLAY ONLY)
 // ============================================================================
 
 function formatTimestamp(isoString: string): string {
@@ -195,20 +135,114 @@ function EmptyState() {
 }
 
 // ============================================================================
+// LOADING SKELETON
+// ============================================================================
+
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-3">
+      {[1, 2, 3].map((i) => (
+        <Card key={i}>
+          <CardContent className="p-4">
+            <div className="flex gap-4">
+              <Skeleton className="w-10 h-10 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-1/4" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================================
 // MAIN COMPONENT
 // ============================================================================
 
 export default function Notifications() {
-  // Local state for read status (mock - would be API in production)
-  const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isMarkingRead, setIsMarkingRead] = useState(false);
   
   const unreadCount = notifications.filter(n => !n.read).length;
   const hasNotifications = notifications.length > 0;
 
-  // Mark all as read handler
-  const handleMarkAllRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  /**
+   * BACKEND-DRIVEN DATA FETCH
+   * 
+   * FRONTEND FROZEN — BACKEND AUTHORITY REQUIRED
+   */
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const response = await api.get<Notification[]>('/student/notifications');
+        setNotifications(response.data);
+      } catch {
+        setError('Unable to load notifications. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchNotifications();
+  }, []);
+
+  /**
+   * BACKEND-DRIVEN MARK ALL READ
+   * 
+   * FRONTEND FROZEN — BACKEND AUTHORITY REQUIRED
+   */
+  const handleMarkAllRead = async () => {
+    setIsMarkingRead(true);
+    try {
+      await api.post('/student/notifications/mark-read');
+      // Refetch to get authoritative state
+      const response = await api.get<Notification[]>('/student/notifications');
+      setNotifications(response.data);
+    } catch {
+      // Error handled silently - state remains unchanged
+    } finally {
+      setIsMarkingRead(false);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <StudentHeader />
+        <main className="container max-w-2xl mx-auto px-4 py-8">
+          <div className="mb-8">
+            <Skeleton className="h-8 w-48 mb-2" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <LoadingSkeleton />
+        </main>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background">
+        <StudentHeader />
+        <main className="container max-w-2xl mx-auto px-4 py-8">
+          <Card className="border-destructive/30">
+            <CardContent className="pt-6">
+              <div className="flex flex-col items-center text-center space-y-4">
+                <AlertCircle className="w-12 h-12 text-destructive" />
+                <p className="text-muted-foreground">{error}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -246,10 +280,11 @@ export default function Notifications() {
               variant="ghost" 
               size="sm" 
               onClick={handleMarkAllRead}
+              disabled={isMarkingRead}
               className="text-muted-foreground hover:text-foreground"
             >
               <CheckCheck className="w-4 h-4 mr-2" />
-              Mark all as read
+              {isMarkingRead ? 'Updating...' : 'Mark all as read'}
             </Button>
           </div>
         )}

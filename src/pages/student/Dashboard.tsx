@@ -1,15 +1,17 @@
+// FRONTEND FROZEN — BACKEND IS SOURCE OF TRUTH
 /**
  * Student Dashboard
  * 
- * FRONTEND FROZEN — BACKEND INTEGRATION ONLY
+ * BACKEND AUTHORITY MODEL:
+ * - All dashboard data comes from backend
+ * - Frontend only renders backend-provided state
+ * - NO mock data or local inference
  * 
  * OWNERSHIP: SYSTEM
  * STUDENT ACCESS: READ-ONLY
- * 
- * High-level overview of the student journey.
- * This is NOT editable by students.
  */
 
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -25,14 +27,17 @@ import {
   Shield,
   Sparkles,
   Lock,
+  AlertCircle,
 } from 'lucide-react';
 import StudentHeader from '@/components/StudentHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import api from '@/utils/api';
 
 // ============================================================================
-// MOCK DATA (SYSTEM-OWNED, READ-ONLY)
+// TYPES (SYSTEM-OWNED, READ-ONLY)
 // ============================================================================
 
 type DashboardStatus = 'processing' | 'under_review' | 'accepted' | 'rejected' | 'waitlisted';
@@ -42,12 +47,6 @@ interface DashboardData {
   readonly statusMessage: string;
   readonly unreadNotificationsCount: number;
 }
-
-const MOCK_DASHBOARD: DashboardData = {
-  currentStatus: 'under_review',
-  statusMessage: 'A company is currently reviewing your profile. No action required from you.',
-  unreadNotificationsCount: 2,
-};
 
 // ============================================================================
 // STATUS CONFIGURATIONS
@@ -100,35 +99,6 @@ const STATUS_CONFIGS: Record<DashboardStatus, StatusConfig> = {
 };
 
 // ============================================================================
-// QUICK LINKS DATA
-// ============================================================================
-
-const QUICK_LINKS = [
-  {
-    title: 'Notifications',
-    description: 'View system and company updates',
-    icon: Bell,
-    href: '/student/notifications',
-    badge: MOCK_DASHBOARD.unreadNotificationsCount > 0 ? MOCK_DASHBOARD.unreadNotificationsCount : null,
-  },
-  {
-    title: 'Match History',
-    description: 'Your past and current matches',
-    icon: History,
-    href: '/student/history',
-    badge: null,
-  },
-  {
-    title: 'Profile',
-    description: 'View your submitted profile',
-    icon: User,
-    href: '/student/profile',
-    badge: null,
-    hint: 'Read-only',
-  },
-];
-
-// ============================================================================
 // AURA GUIDANCE MESSAGES
 // ============================================================================
 
@@ -139,12 +109,112 @@ const AURA_MESSAGES = [
 ];
 
 // ============================================================================
+// LOADING SKELETON
+// ============================================================================
+
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-6">
+      <Skeleton className="h-40 w-full rounded-xl" />
+      <div className="space-y-3">
+        <Skeleton className="h-20 w-full rounded-xl" />
+        <Skeleton className="h-20 w-full rounded-xl" />
+        <Skeleton className="h-20 w-full rounded-xl" />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // MAIN COMPONENT
 // ============================================================================
 
 export default function Dashboard() {
-  const config = STATUS_CONFIGS[MOCK_DASHBOARD.currentStatus];
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  /**
+   * BACKEND-DRIVEN DATA FETCH
+   * 
+   * FRONTEND FROZEN — BACKEND AUTHORITY REQUIRED
+   */
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      try {
+        const response = await api.get<DashboardData>('/student/dashboard');
+        setDashboardData(response.data);
+      } catch {
+        setError('Unable to load dashboard. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDashboard();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container max-w-3xl mx-auto px-4 py-6">
+          <StudentHeader />
+          <div className="text-center mb-8">
+            <Skeleton className="h-8 w-48 mx-auto mb-2" />
+            <Skeleton className="h-4 w-64 mx-auto" />
+          </div>
+          <LoadingSkeleton />
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !dashboardData) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container max-w-3xl mx-auto px-4 py-6">
+          <StudentHeader />
+          <Card className="border-destructive/30">
+            <CardContent className="pt-6">
+              <div className="flex flex-col items-center text-center space-y-4">
+                <AlertCircle className="w-12 h-12 text-destructive" />
+                <p className="text-muted-foreground">{error || 'Unable to load dashboard'}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  const config = STATUS_CONFIGS[dashboardData.currentStatus];
   const StatusIcon = config.icon;
+
+  // Quick links with dynamic notification count from backend
+  const quickLinks = [
+    {
+      title: 'Notifications',
+      description: 'View system and company updates',
+      icon: Bell,
+      href: '/student/notifications',
+      badge: dashboardData.unreadNotificationsCount > 0 ? dashboardData.unreadNotificationsCount : null,
+    },
+    {
+      title: 'Match History',
+      description: 'Your past and current matches',
+      icon: History,
+      href: '/student/history',
+      badge: null,
+    },
+    {
+      title: 'Profile',
+      description: 'View your submitted profile',
+      icon: User,
+      href: '/student/profile',
+      badge: null,
+      hint: 'Read-only',
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-background">
@@ -189,7 +259,7 @@ export default function Dashboard() {
                     {config.label}
                   </Badge>
                   <p className="text-sm text-foreground/80">
-                    {MOCK_DASHBOARD.statusMessage}
+                    {dashboardData.statusMessage}
                   </p>
                 </div>
               </div>
@@ -212,7 +282,7 @@ export default function Dashboard() {
         >
           <h2 className="text-lg font-semibold mb-3 text-foreground">Quick Links</h2>
           <div className="grid gap-3">
-            {QUICK_LINKS.map((link) => (
+            {quickLinks.map((link) => (
               <Link key={link.href} to={link.href}>
                 <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
                   <CardContent className="p-4">
