@@ -1,13 +1,17 @@
+// FRONTEND FROZEN — BACKEND IS SOURCE OF TRUTH
 /**
  * Student Result Page
  * 
- * FRONTEND FROZEN — BACKEND INTEGRATION ONLY
+ * BACKEND AUTHORITY MODEL:
+ * - All match data comes from backend
+ * - Frontend only renders backend-provided state
+ * - NO mock data or local state inference
  * 
  * OWNERSHIP: SYSTEM
  * STUDENT ACCESS: READ-ONLY
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Loader2, 
@@ -21,18 +25,20 @@ import {
   Gauge,
   Shield,
   Sparkles,
-  Lock
+  Lock,
+  AlertCircle
 } from 'lucide-react';
 import StudentHeader from '@/components/StudentHeader';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import api from '@/utils/api';
 
 // ============================================================================
-// MOCK DATA - System-owned, read-only
-// Change this value to test different states:
-// 'processing' | 'under_review' | 'accepted' | 'rejected' | 'waitlisted' | 'position_filled'
+// TYPES - Backend-owned, read-only
 // ============================================================================
+
 type StudentMatchStatus = 
   | 'processing' 
   | 'under_review' 
@@ -41,21 +47,14 @@ type StudentMatchStatus =
   | 'waitlisted' 
   | 'position_filled';
 
-const MOCK_STATUS: StudentMatchStatus = 'accepted';
-
-const MOCK_MATCH_DATA = {
-  roleTitle: 'Frontend Developer Intern',
-  companyName: 'TechCorp Solutions',
-  location: 'Bangalore, Karnataka',
-  matchScore: 87,
-  explanations: [
-    '92% skill overlap with required technologies',
-    'Within 12 km of job location',
-    'Preference alignment: Hybrid work style',
-    'Domain match: Web Development',
-    'Local candidate consideration applied'
-  ]
-};
+interface MatchResultData {
+  status: StudentMatchStatus;
+  roleTitle: string;
+  companyName: string;
+  location: string;
+  matchScore: number;
+  explanations: string[];
+}
 
 // ============================================================================
 // STATUS CONFIGURATIONS - Read-only system states
@@ -135,11 +134,75 @@ const STATUS_CONFIGS: Record<StudentMatchStatus, StatusConfig> = {
 };
 
 // ============================================================================
+// LOADING SKELETON
+// ============================================================================
+const ResultSkeleton: React.FC = () => (
+  <div className="space-y-6">
+    <Skeleton className="h-32 w-full rounded-xl" />
+    <Skeleton className="h-48 w-full rounded-xl" />
+    <Skeleton className="h-36 w-full rounded-xl" />
+  </div>
+);
+
+// ============================================================================
 // COMPONENT: Student Result Page (READ-ONLY, SYSTEM-OWNED)
 // ============================================================================
 const Result: React.FC = () => {
-  const status = MOCK_STATUS;
-  const config = STATUS_CONFIGS[status];
+  const [matchData, setMatchData] = useState<MatchResultData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  /**
+   * BACKEND-DRIVEN DATA FETCH
+   * 
+   * FRONTEND FROZEN — BACKEND AUTHORITY REQUIRED
+   * All match data comes from backend. Frontend never infers state.
+   */
+  useEffect(() => {
+    const fetchMatchResult = async () => {
+      try {
+        const response = await api.get<MatchResultData>('/student/match-result');
+        setMatchData(response.data);
+      } catch {
+        setError('Unable to load match result. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchMatchResult();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen p-6 bg-gradient-to-br from-background via-muted/30 to-background">
+        <div className="max-w-2xl mx-auto space-y-6">
+          <StudentHeader />
+          <ResultSkeleton />
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !matchData) {
+    return (
+      <div className="min-h-screen p-6 bg-gradient-to-br from-background via-muted/30 to-background">
+        <div className="max-w-2xl mx-auto space-y-6">
+          <StudentHeader />
+          <Card className="border-destructive/30">
+            <CardContent className="pt-6">
+              <div className="flex flex-col items-center text-center space-y-4">
+                <AlertCircle className="w-12 h-12 text-destructive" />
+                <p className="text-muted-foreground">{error || 'No match data available'}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  const config = STATUS_CONFIGS[matchData.status];
   const Icon = config.icon;
 
   return (
@@ -169,7 +232,7 @@ const Result: React.FC = () => {
           <Card className={`${config.bgClass} border-2`}>
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center space-y-4">
-                <div className={`w-16 h-16 rounded-full bg-background/80 flex items-center justify-center`}>
+                <div className="w-16 h-16 rounded-full bg-background/80 flex items-center justify-center">
                   <Icon className={`w-8 h-8 ${config.iconClass}`} />
                 </div>
                 <div className="space-y-2">
@@ -208,13 +271,13 @@ const Result: React.FC = () => {
                   <div className="flex items-start gap-3">
                     <Building2 className="w-5 h-5 text-muted-foreground mt-0.5" />
                     <div>
-                      <p className="font-medium text-foreground">{MOCK_MATCH_DATA.roleTitle}</p>
-                      <p className="text-sm text-muted-foreground">{MOCK_MATCH_DATA.companyName}</p>
+                      <p className="font-medium text-foreground">{matchData.roleTitle}</p>
+                      <p className="text-sm text-muted-foreground">{matchData.companyName}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <MapPin className="w-5 h-5 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">{MOCK_MATCH_DATA.location}</p>
+                    <p className="text-sm text-muted-foreground">{matchData.location}</p>
                   </div>
                 </div>
 
@@ -227,13 +290,13 @@ const Result: React.FC = () => {
                       <Gauge className="w-4 h-4 text-muted-foreground" />
                       <span className="text-sm font-medium text-foreground">System Score</span>
                     </div>
-                    <span className="text-sm text-muted-foreground">{MOCK_MATCH_DATA.matchScore}%</span>
+                    <span className="text-sm text-muted-foreground">{matchData.matchScore}%</span>
                   </div>
                   <div className="relative h-3 bg-muted rounded-full overflow-hidden">
                     <motion.div 
                       className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary to-secondary rounded-full"
                       initial={{ width: 0 }}
-                      animate={{ width: `${MOCK_MATCH_DATA.matchScore}%` }}
+                      animate={{ width: `${matchData.matchScore}%` }}
                       transition={{ duration: 0.8, delay: 0.4 }}
                     />
                   </div>
@@ -247,7 +310,7 @@ const Result: React.FC = () => {
         )}
 
         {/* Section 3: Why You Were Matched (Only if matched) */}
-        {config.showMatchDetails && (
+        {config.showMatchDetails && matchData.explanations.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -267,7 +330,7 @@ const Result: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <ul className="space-y-3">
-                  {MOCK_MATCH_DATA.explanations.map((reason, index) => (
+                  {matchData.explanations.map((reason, index) => (
                     <motion.li 
                       key={index}
                       className="flex items-start gap-3 text-sm text-muted-foreground"

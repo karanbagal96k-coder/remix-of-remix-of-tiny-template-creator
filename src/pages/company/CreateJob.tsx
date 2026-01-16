@@ -1,4 +1,13 @@
 // FRONTEND FROZEN — BACKEND IS SOURCE OF TRUTH
+/**
+ * Create Job Page
+ * 
+ * BACKEND AUTHORITY MODEL:
+ * - Company submits raw JD text
+ * - Backend performs AI/NLP extraction
+ * - Frontend displays backend-provided suggestions
+ * - NO frontend AI, regex, or heuristics
+ */
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -12,10 +21,9 @@ import CompanyHeader from '@/components/CompanyHeader';
 import AuraGuidance from '@/components/AuraGuidance';
 import { useCompany } from '@/context/CompanyContext';
 import type { CreateJobInput } from '@/types/company';
+import api from '@/utils/api';
 
-// ============= SIMULATED AI JD ANALYSIS =============
-// Dummy extraction logic using keyword matching and regex
-
+// ============= TYPES =============
 interface JDAnalysisResult {
   title: string;
   skills: string[];
@@ -24,150 +32,6 @@ interface JDAnalysisResult {
   stipend?: number;
   perks?: string;
 }
-
-const SKILL_KEYWORDS = [
-  'react', 'angular', 'vue', 'javascript', 'typescript', 'python', 'java', 'node.js',
-  'nodejs', 'express', 'mongodb', 'sql', 'mysql', 'postgresql', 'aws', 'docker',
-  'kubernetes', 'git', 'html', 'css', 'tailwind', 'figma', 'photoshop', 'excel',
-  'power bi', 'tableau', 'machine learning', 'ml', 'ai', 'data analysis', 'data science',
-  'communication', 'teamwork', 'problem solving', 'agile', 'scrum', 'api', 'rest',
-  'graphql', 'c++', 'c#', '.net', 'flutter', 'react native', 'swift', 'kotlin',
-  'android', 'ios', 'linux', 'devops', 'ci/cd', 'testing', 'qa', 'selenium'
-];
-
-const analyzeJobDescription = async (jd: string): Promise<JDAnalysisResult> => {
-  // Simulate AI processing latency (800-1200ms)
-  await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 400));
-
-  const lowerJD = jd.toLowerCase();
-
-  // Extract title - look for common patterns
-  let title = '';
-  const titlePatterns = [
-    /(?:looking for|hiring|seeking|need|require)\s+(?:a\s+)?([a-z\s]+(?:intern|developer|engineer|analyst|designer|manager|executive|associate))/i,
-    /(?:position|role|job title|opening)[\s:]+([a-z\s]+(?:intern|developer|engineer|analyst|designer|manager))/i,
-    /^([a-z\s]+(?:intern|developer|engineer|analyst|designer|manager|executive))/im,
-  ];
-  
-  for (const pattern of titlePatterns) {
-    const match = jd.match(pattern);
-    if (match) {
-      title = match[1].trim().replace(/\s+/g, ' ');
-      title = title.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-      break;
-    }
-  }
-
-  if (!title) {
-    // Fallback: check for common role keywords
-    if (lowerJD.includes('software') && lowerJD.includes('intern')) title = 'Software Development Intern';
-    else if (lowerJD.includes('frontend')) title = 'Frontend Developer';
-    else if (lowerJD.includes('backend')) title = 'Backend Developer';
-    else if (lowerJD.includes('full stack') || lowerJD.includes('fullstack')) title = 'Full Stack Developer';
-    else if (lowerJD.includes('data analyst')) title = 'Data Analyst';
-    else if (lowerJD.includes('data science')) title = 'Data Science Intern';
-    else if (lowerJD.includes('marketing')) title = 'Marketing Intern';
-    else if (lowerJD.includes('design')) title = 'Design Intern';
-    else title = 'Intern';
-  }
-
-  // Extract skills - match against known keywords
-  const skills: string[] = [];
-  for (const skill of SKILL_KEYWORDS) {
-    if (lowerJD.includes(skill.toLowerCase())) {
-      // Capitalize properly
-      const formatted = skill.split(' ').map(w => 
-        ['ai', 'ml', 'qa', 'api', 'sql', 'aws', 'css', 'html'].includes(w.toLowerCase()) 
-          ? w.toUpperCase() 
-          : w.charAt(0).toUpperCase() + w.slice(1)
-      ).join(' ');
-      if (!skills.includes(formatted)) {
-        skills.push(formatted);
-      }
-    }
-  }
-
-  // Extract location
-  let location = '';
-  const locationPatterns = [
-    /(?:location|based in|office|work from)[\s:]+([a-z\s,]+?)(?:\.|,|$|\n)/i,
-    /(bangalore|bengaluru|mumbai|delhi|hyderabad|chennai|pune|kolkata|noida|gurgaon|gurugram)[,\s]*(india|karnataka|maharashtra|telangana|tamil nadu)?/i,
-    /(?:remote|work from home|wfh)/i,
-  ];
-
-  for (const pattern of locationPatterns) {
-    const match = jd.match(pattern);
-    if (match) {
-      location = match[0].includes('remote') || match[0].includes('wfh') 
-        ? 'Remote' 
-        : match[1]?.trim() || '';
-      location = location.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-      break;
-    }
-  }
-
-  // Extract intake/positions
-  let intake = 1;
-  const intakePatterns = [
-    /(\d+)\s*(?:positions?|openings?|vacancies?|interns?|candidates?)/i,
-    /(?:hiring|need|require|looking for)\s*(\d+)/i,
-    /(?:positions?|openings?)\s*(?:available)?[\s:]*(\d+)/i,
-  ];
-
-  for (const pattern of intakePatterns) {
-    const match = jd.match(pattern);
-    if (match) {
-      intake = parseInt(match[1], 10) || 1;
-      break;
-    }
-  }
-
-  // Extract stipend
-  let stipend: number | undefined;
-  const stipendPatterns = [
-    /(?:stipend|salary|compensation|pay)[\s:]*(?:rs\.?|inr|₹)?\s*(\d{1,3}(?:,\d{3})*|\d+)(?:k|K)?/i,
-    /(?:rs\.?|inr|₹)\s*(\d{1,3}(?:,\d{3})*|\d+)(?:k|K)?\s*(?:per month|\/month|p\.m\.?|pm)/i,
-  ];
-
-  for (const pattern of stipendPatterns) {
-    const match = jd.match(pattern);
-    if (match) {
-      let amount = match[1].replace(/,/g, '');
-      stipend = parseInt(amount, 10);
-      if (jd.toLowerCase().includes(match[0].toLowerCase()) && (match[0].includes('k') || match[0].includes('K'))) {
-        stipend *= 1000;
-      }
-      break;
-    }
-  }
-
-  // Extract perks
-  const perksKeywords = ['certificate', 'letter of recommendation', 'lor', 'flexible', 'remote', 
-    'wfh', 'work from home', 'mentorship', 'training', 'ppo', 'pre-placement', 'bonus', 
-    'health insurance', 'snacks', 'meals', 'team outings'];
-  
-  const foundPerks: string[] = [];
-  for (const perk of perksKeywords) {
-    if (lowerJD.includes(perk)) {
-      const formatted = perk === 'lor' ? 'Letter of Recommendation' 
-        : perk === 'ppo' ? 'PPO (Pre-Placement Offer)'
-        : perk === 'wfh' ? 'Work from Home'
-        : perk.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-      if (!foundPerks.includes(formatted)) {
-        foundPerks.push(formatted);
-      }
-    }
-  }
-
-  return {
-    title,
-    skills: skills.slice(0, 10), // Limit to 10 skills
-    location,
-    intake: Math.min(intake, 100), // Cap at 100
-    stipend,
-    perks: foundPerks.length > 0 ? foundPerks.join(', ') : undefined,
-  };
-};
 
 // ============= AI SUGGESTED HINT COMPONENT =============
 const AISuggestedHint: React.FC<{ show: boolean }> = ({ show }) => {
@@ -212,6 +76,13 @@ const CreateJob: React.FC = () => {
   
   const [error, setError] = useState('');
 
+  /**
+   * BACKEND-DRIVEN JD ANALYSIS
+   * 
+   * FRONTEND FROZEN — BACKEND AUTHORITY REQUIRED
+   * Frontend sends raw JD text, backend returns extracted fields.
+   * NO frontend regex, keyword matching, or heuristics.
+   */
   const handleAnalyzeJD = async () => {
     if (jobDescription.length < 100) {
       setError('Please enter a more detailed job description (at least 100 characters)');
@@ -222,14 +93,19 @@ const CreateJob: React.FC = () => {
     setIsAnalyzing(true);
 
     try {
-      const result = await analyzeJobDescription(jobDescription);
+      // BACKEND API CALL - All extraction logic is backend-owned
+      const response = await api.post<JDAnalysisResult>('/company/jobs/analyze-jd', {
+        jobDescription: jobDescription.trim()
+      });
+      
+      const result = response.data;
 
-      // Auto-fill fields and mark as AI suggested
+      // Auto-fill fields from backend response
       if (result.title) {
         setTitle(result.title);
         setTitleSuggested(true);
       }
-      if (result.skills.length > 0) {
+      if (result.skills && result.skills.length > 0) {
         setSkills(result.skills);
         setSkillsSuggested(true);
       }
@@ -263,7 +139,7 @@ const CreateJob: React.FC = () => {
     if (trimmed && !skills.includes(trimmed)) {
       setSkills([...skills, trimmed]);
       setSkillInput('');
-      setSkillsSuggested(false); // Manual edit clears AI hint
+      setSkillsSuggested(false);
     }
   };
 
@@ -310,12 +186,14 @@ const CreateJob: React.FC = () => {
     }
 
     try {
+      // Location coordinates are backend-resolved from label
+      // Frontend sends label only, backend geocodes
       const jobData: CreateJobInput = {
         title: title.trim(),
         requiredSkills: skills,
         location: {
-          lat: 28.6139 + (Math.random() - 0.5) * 0.1,
-          lng: 77.2090 + (Math.random() - 0.5) * 0.1,
+          lat: 0, // BACKEND AUTHORITY REQUIRED - Backend will geocode
+          lng: 0, // BACKEND AUTHORITY REQUIRED - Backend will geocode
           label: locationLabel.trim(),
         },
         intake: intakeNum,
@@ -368,7 +246,7 @@ const CreateJob: React.FC = () => {
                 value={jobDescription}
                 onChange={(e) => {
                   setJobDescription(e.target.value);
-                  setHasAnalyzed(false); // Reset analysis state on edit
+                  setHasAnalyzed(false);
                 }}
                 className="min-h-[200px] resize-none"
                 disabled={isLoading || isAnalyzing}
@@ -496,7 +374,7 @@ const CreateJob: React.FC = () => {
                 <Input
                   id="location"
                   type="text"
-                  placeholder="e.g., Bangalore, Karnataka"
+                  placeholder="e.g., Bangalore, Karnataka or Remote"
                   value={locationLabel}
                   onChange={(e) => {
                     setLocationLabel(e.target.value);
@@ -509,10 +387,10 @@ const CreateJob: React.FC = () => {
               </div>
             </div>
 
-            {/* Intake Capacity */}
+            {/* Intake */}
             <div className="space-y-2">
               <Label htmlFor="intake" className="flex items-center">
-                Intake Capacity *
+                Number of Positions *
                 <AISuggestedHint show={intakeSuggested} />
               </Label>
               <div className="relative">
@@ -520,7 +398,7 @@ const CreateJob: React.FC = () => {
                 <Input
                   id="intake"
                   type="number"
-                  placeholder="Number of interns needed"
+                  placeholder="e.g., 5"
                   value={intake}
                   onChange={(e) => {
                     setIntake(e.target.value);
@@ -529,7 +407,7 @@ const CreateJob: React.FC = () => {
                   className="pl-10"
                   disabled={isLoading || isAnalyzing}
                   min={1}
-                  max={1000}
+                  max={100}
                 />
               </div>
             </div>
@@ -537,7 +415,7 @@ const CreateJob: React.FC = () => {
             {/* Stipend (Optional) */}
             <div className="space-y-2">
               <Label htmlFor="stipend" className="flex items-center">
-                Monthly Stipend (Optional)
+                Stipend (₹/month)
                 <AISuggestedHint show={stipendSuggested} />
               </Label>
               <div className="relative">
@@ -561,58 +439,62 @@ const CreateJob: React.FC = () => {
             {/* Perks (Optional) */}
             <div className="space-y-2">
               <Label htmlFor="perks" className="flex items-center">
-                Perks (Optional)
+                Perks & Benefits
                 <AISuggestedHint show={perksSuggested} />
               </Label>
               <div className="relative">
                 <Gift className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                 <Textarea
                   id="perks"
-                  placeholder="e.g., Certificate, Letter of Recommendation, Flexible hours..."
+                  placeholder="e.g., Certificate, Letter of Recommendation, Flexible Hours..."
                   value={perks}
                   onChange={(e) => {
                     setPerks(e.target.value);
                     setPerksSuggested(false);
                   }}
-                  className="pl-10 min-h-[80px]"
+                  className="pl-10 min-h-[80px] resize-none"
                   disabled={isLoading || isAnalyzing}
                   maxLength={500}
                 />
               </div>
             </div>
 
-            {error && (
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="text-sm text-destructive text-center"
-              >
-                {error}
-              </motion.p>
-            )}
+            {/* Error Display */}
+            <AnimatePresence>
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="bg-destructive/10 border border-destructive/30 rounded-lg p-3"
+                >
+                  <p className="text-sm text-destructive">{error}</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
+            {/* Submit Button */}
             <Button
               type="submit"
               className="w-full"
-              disabled={
-                isLoading || 
-                isAnalyzing || 
-                !jobDescription.trim() || 
-                jdCharCount < 100 ||
-                !title.trim() || 
-                skills.length === 0 || 
-                !locationLabel.trim() || 
-                !intake
-              }
+              disabled={isLoading || isAnalyzing}
             >
-              {isLoading ? 'Submitting...' : 'Submit Job for Processing'}
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Creating Job...
+                </>
+              ) : (
+                'Create Job Posting'
+              )}
             </Button>
           </form>
         </motion.div>
 
+        {/* Aura Guidance */}
         <div className="mt-6">
           <AuraGuidance
-            message="Paste your complete job description and click 'Analyze JD' to auto-fill the form. You can review and edit any field before submitting."
+            message="Tip: Include specific technical skills, preferred experience level, and whether the role is remote, hybrid, or on-site to attract better matches."
           />
         </div>
       </div>

@@ -1,24 +1,49 @@
+// FRONTEND FROZEN — BACKEND IS SOURCE OF TRUTH
 /**
  * Student Header Component
  * 
- * FRONTEND FROZEN — BACKEND INTEGRATION ONLY
+ * BACKEND AUTHORITY MODEL:
+ * - Unread count comes from backend via user context
+ * - Frontend only renders backend-provided state
+ * - NO mock data
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { LogOut, User, Home, Loader2, Bell } from 'lucide-react';
 import { useUI } from '@/context/UIContext';
 import AnimatedButton from './AnimatedButton';
 import { Badge } from '@/components/ui/badge';
+import api from '@/utils/api';
 
-// Mock unread count - would come from API in production
-const MOCK_UNREAD_COUNT = 2;
+interface NotificationCount {
+  unread: number;
+}
 
 const StudentHeader: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout } = useUI();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  /**
+   * BACKEND-DRIVEN NOTIFICATION COUNT
+   * 
+   * FRONTEND FROZEN — BACKEND AUTHORITY REQUIRED
+   */
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const response = await api.get<NotificationCount>('/student/notifications/unread-count');
+        setUnreadCount(response.data.unread);
+      } catch {
+        // Silently fail - count stays at 0
+      }
+    };
+
+    fetchUnreadCount();
+  }, []);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -66,12 +91,12 @@ const StudentHeader: React.FC = () => {
           aria-label="Notifications"
         >
           <Bell className="w-5 h-5 text-muted-foreground" />
-          {MOCK_UNREAD_COUNT > 0 && (
+          {unreadCount > 0 && (
             <Badge
               variant="default"
               className="absolute -top-1 -right-1 w-5 h-5 p-0 flex items-center justify-center text-xs"
             >
-              {MOCK_UNREAD_COUNT > 9 ? '9+' : MOCK_UNREAD_COUNT}
+              {unreadCount > 9 ? '9+' : unreadCount}
             </Badge>
           )}
         </Link>
